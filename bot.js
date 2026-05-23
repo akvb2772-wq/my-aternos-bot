@@ -100,7 +100,7 @@ bot.on('message', (msg) => {
   const text = msg.text.trim();
   const chatId = msg.chat.id;
 
-  // 💬 رسالة لسيرفر محدد
+// 💬 رسالة لسيرفر محدد
   if (text.startsWith('رسالة')) {
     const match = text.match(/رسالة\s*(\d+)\s*:\s*(.+)/);
     if (match) {
@@ -108,47 +108,26 @@ bot.on('message', (msg) => {
       const msgToSend = match[2].trim();
       const srv = serversList[index];
 
-      if (!srv) {
-        bot.sendMessage(chatId, `⚠️ ما في سيرفر برقم [${index + 1}]!`);
+      if (!srv || !srv.client) {
+        bot.sendMessage(chatId, `⚠️ السيرفر غير موجود أو غير متصل!`);
         return;
       }
 
-      if (srv.client) {
-        try {
-          // إرسال حركة وهمية أولاً لتجنب الطرد
-          srv.currentTick += BigInt(1);
-          try {
-            srv.client.write('player_auth_input', {
-              pitch: 0,
-              yaw: 0,
-              position: srv.lastPosition || { x: 0, y: 64, z: 0 },
-              move_vector: { x: 0, z: 0 },
-              head_yaw: 0,
-              input_data: { signup: false },
-              input_mode: 'mouse',
-              play_mode: 'normal',
-              tick: srv.currentTick
-            });
-          } catch(ignore) {}
+      try {
+        // إرسال الرسالة باستخدام 'text' فقط (الطريقة الوحيدة المضمونة)
+        srv.client.write('text', {
+          type: 'chat',
+          needs_translation: false,
+          source_name: srv.client.username || 'BotAFK',
+          xuid: '',
+          platform_chat_id: '',
+          message: msgToSend,
+          filtered_message: msgToSend
+        });
 
-          // إرسال الرسالة
-          srv.client.write('text', {
-            type: 'chat',
-            needs_translation: false,
-            source_name: srv.client.username || 'AFK_Bot',
-            xuid: '',
-            platform_chat_id: '',
-            message: msgToSend,
-            filtered_message: ''
-          });
-
-          bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: "${msgToSend}"`);
-        } catch (e) {
-          console.error('خطأ إرسال الشات:', e.message);
-          bot.sendMessage(chatId, `❌ فشل الإرسال: ` + e.message);
-        }
-      } else {
-        bot.sendMessage(chatId, `⚠️ السيرفر [${index + 1}] غير متصل!`);
+        bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: ${msgToSend}`);
+      } catch (e) {
+        bot.sendMessage(chatId, `❌ فشل الإرسال: ${e.message}`);
       }
     } else {
       bot.sendMessage(chatId, `❌ صيغة خاطئة!\nاكتب هكذا:\nرسالة 1: شلونكم شباب`);
