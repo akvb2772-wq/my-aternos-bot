@@ -37,7 +37,8 @@ function createServerObj(ip, port) {
     reconnectAttempts: 0,
     connectedAt: null,
     lastPosition: { x: 0, y: 64, z: 0 },
-    currentTick: BigInt(0)
+    currentTick: BigInt(0),
+    fixedUsername: `AFK_Bot`
   };
 }
 
@@ -114,16 +115,33 @@ bot.on('message', (msg) => {
 
       if (srv.client) {
         try {
-          // type: 1 = chat في bedrock-protocol
+          // إرسال حركة وهمية أولاً لتجنب الطرد
+          srv.currentTick += BigInt(1);
+          try {
+            srv.client.write('player_auth_input', {
+              pitch: 0,
+              yaw: 0,
+              position: srv.lastPosition || { x: 0, y: 64, z: 0 },
+              move_vector: { x: 0, z: 0 },
+              head_yaw: 0,
+              input_data: { signup: false },
+              input_mode: 'mouse',
+              play_mode: 'normal',
+              tick: srv.currentTick
+            });
+          } catch(ignore) {}
+
+          // إرسال الرسالة
           srv.client.write('text', {
-            type: 1,
+            type: 'chat',
             needs_translation: false,
-            source_name: srv.client.username || 'BotAFK',
+            source_name: srv.client.username || 'AFK_Bot',
             xuid: '',
             platform_chat_id: '',
             message: msgToSend,
             filtered_message: ''
           });
+
           bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: "${msgToSend}"`);
         } catch (e) {
           console.error('خطأ إرسال الشات:', e.message);
@@ -333,7 +351,7 @@ function connectMinecraftBot(chatId, srv) {
   }
   if (srv.afkInterval) { clearInterval(srv.afkInterval); srv.afkInterval = null; }
 
-  const username = `BotAFK_${Math.floor(Math.random() * 8999) + 1000}`;
+  const username = srv.fixedUsername || `AFK_Bot`;
   srv.lastPosition = { x: 0, y: 64, z: 0 };
   srv.currentTick = BigInt(0);
 
