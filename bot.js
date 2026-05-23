@@ -129,18 +129,41 @@ bot.on('message', (msg) => {
             tick: srv.currentTick
           });
 
-          srv.client.write('text', {
-            type: 'chat',
-            needs_translation: false,
-            source_name: srv.client.username || 'BotAFK',
-            xuid: '',
-            platform_chat_id: '',
-            message: msgToSend
-          });
+          // إرسال الرسالة بطريقتين للتوافق مع كل الإصدارات
+          let sent = false;
 
-          bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: "${msgToSend}"`);
+          // الطريقة الأولى: command packet (الأضمن)
+          try {
+            srv.client.write('command_request', {
+              command: 'say ' + msgToSend,
+              origin: { type: 'player', uuid: '', request_id: '' },
+              internal: false,
+              version: 52
+            });
+            sent = true;
+          } catch (e1) {
+            // جرب الطريقة الثانية
+            try {
+              srv.client.write('text', {
+                type: 'chat',
+                needs_translation: false,
+                source_name: srv.client.username || 'BotAFK',
+                xuid: '',
+                platform_chat_id: '',
+                message: msgToSend,
+                filtered_message: ''
+              });
+              sent = true;
+            } catch (e2) {}
+          }
+
+          if (sent) {
+            bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: ${msgToSend}`);
+          } else {
+            bot.sendMessage(chatId, `❌ فشل الإرسال للسيرفر [${index + 1}].`);
+          }
         } catch (e) {
-          bot.sendMessage(chatId, `❌ فشل الإرسال للسيرفر [${index + 1}].`);
+          bot.sendMessage(chatId, `❌ فشل الإرسال للسيرفر [${index + 1}]: ` + e.message);
         }
       } else {
         bot.sendMessage(chatId, `⚠️ السيرفر [${index + 1}] غير متصل!`);
