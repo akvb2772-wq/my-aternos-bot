@@ -114,56 +114,18 @@ bot.on('message', (msg) => {
 
       if (srv.client) {
         try {
-          srv.currentTick += BigInt(1);
-          const fakeYaw = Math.random() * 360;
-
-          srv.client.write('player_auth_input', {
-            pitch: 0,
-            yaw: fakeYaw,
-            position: srv.lastPosition,
-            move_vector: { x: 0, z: 0 },
-            head_yaw: fakeYaw,
-            input_data: { signup: false },
-            input_mode: 'mouse',
-            play_mode: 'normal',
-            tick: srv.currentTick
+          srv.client.write('text', {
+            type: 'chat',
+            needs_translation: false,
+            source_name: srv.client.username || 'BotAFK',
+            xuid: '',
+            platform_chat_id: '',
+            message: msgToSend,
+            filtered_message: ''
           });
-
-          // إرسال الرسالة بطريقتين للتوافق مع كل الإصدارات
-          let sent = false;
-
-          // الطريقة الأولى: command packet (الأضمن)
-          try {
-            srv.client.write('command_request', {
-              command: 'say ' + msgToSend,
-              origin: { type: 'player', uuid: '', request_id: '' },
-              internal: false,
-              version: 52
-            });
-            sent = true;
-          } catch (e1) {
-            // جرب الطريقة الثانية
-            try {
-              srv.client.write('text', {
-                type: 'chat',
-                needs_translation: false,
-                source_name: srv.client.username || 'BotAFK',
-                xuid: '',
-                platform_chat_id: '',
-                message: msgToSend,
-                filtered_message: ''
-              });
-              sent = true;
-            } catch (e2) {}
-          }
-
-          if (sent) {
-            bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: ${msgToSend}`);
-          } else {
-            bot.sendMessage(chatId, `❌ فشل الإرسال للسيرفر [${index + 1}].`);
-          }
+          bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: ${msgToSend}`);
         } catch (e) {
-          bot.sendMessage(chatId, `❌ فشل الإرسال للسيرفر [${index + 1}]: ` + e.message);
+          bot.sendMessage(chatId, `❌ فشل الإرسال: ` + e.message);
         }
       } else {
         bot.sendMessage(chatId, `⚠️ السيرفر [${index + 1}] غير متصل!`);
@@ -459,4 +421,4 @@ function connectMinecraftBot(chatId, srv) {
   } catch (e) {
     if (srv.autoReconnect) triggerReconnect();
   }
-}
+            }
