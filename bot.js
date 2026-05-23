@@ -116,9 +116,9 @@ bot.on('message', (msg) => {
         try {
           // إرسال عبر command /say (يعمل مع offline بدون طرد)
           srv.client.queue('command_request', {
-            command: '/say ' + msgToSend,
+            command: 'say ' + msgToSend,
             origin: {
-              type: 0,
+              type: 'player',
               uuid: '',
               request_id: ''
             },
@@ -423,4 +423,4 @@ function connectMinecraftBot(chatId, srv) {
   } catch (e) {
     if (srv.autoReconnect) triggerReconnect();
   }
-}
+        }
