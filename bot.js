@@ -114,14 +114,16 @@ bot.on('message', (msg) => {
 
       if (srv.client) {
         try {
-          srv.client.write('text', {
-            type: 'chat',
-            needs_translation: false,
-            source_name: srv.client.username || 'BotAFK',
-            xuid: '',
-            platform_chat_id: '',
-            message: msgToSend,
-            filtered_message: ''
+          // إرسال عبر command /say (يعمل مع offline بدون طرد)
+          srv.client.queue('command_request', {
+            command: '/say ' + msgToSend,
+            origin: {
+              type: 0,
+              uuid: '',
+              request_id: ''
+            },
+            internal: false,
+            version: 52
           });
           bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: ${msgToSend}`);
         } catch (e) {
@@ -421,4 +423,4 @@ function connectMinecraftBot(chatId, srv) {
   } catch (e) {
     if (srv.autoReconnect) triggerReconnect();
   }
-            }
+}
