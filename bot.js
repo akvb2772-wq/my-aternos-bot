@@ -114,20 +114,19 @@ bot.on('message', (msg) => {
       }
 
       try {
-        // إرسال الرسالة باستخدام 'text' فقط (الطريقة الوحيدة المضمونة)
-        srv.client.write('text', {
-          type: 'chat',
-          needs_translation: false,
-          source_name: srv.client.username || 'BotAFK',
-          xuid: '',
-          platform_chat_id: '',
-          message: msgToSend,
-          filtered_message: msgToSend
-        });
+    // إرسال الرسالة بأبسط شكل ممكن (أغلب السيرفرات تحب هذا)
+    srv.client.write('text', {
+        type: 'chat',
+        message: msgToSend,
+        source_name: srv.client.username || 'AFK_Bot',
+        // شلنا الـ xuid والـ platform_chat_id لأنها قد تسبب طرد
+        needs_translation: false,
+        filtered_message: msgToSend
+    });
 
-        bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: ${msgToSend}`);
-      } catch (e) {
-        bot.sendMessage(chatId, `❌ فشل الإرسال: ${e.message}`);
+    bot.sendMessage(chatId, `✅ تم الإرسال: ${msgToSend}`);
+} catch (e) {
+    bot.sendMessage(chatId, `❌ فشل الإرسال: ${e.message}`);
       }
     } else {
       bot.sendMessage(chatId, `❌ صيغة خاطئة!\nاكتب هكذا:\nرسالة 1: شلونكم شباب`);
