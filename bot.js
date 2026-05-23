@@ -114,29 +114,24 @@ bot.on('message', (msg) => {
       }
 
       try {
-  // محاولة إرسال الرسالة بدون الحقول التي قد تسبب تعارضtry {
-    // 1. تجهيز البيانات والتأكد أنها نصوص (String)
-    const packetData = {
+    // إرسال الرسالة بطريقة الـ queue وهي الأكثر استقراراً للمكتبة
+    srv.client.queue('text', {
         type: 'chat',
         needs_translation: false,
-        source_name: String(srv.client.username || 'BotAFK'),
-        xuid: '0', // نضع '0' بدلاً من قيمة فارغة لأن السيرفر يتوقع رقم حساب (نصي)
-        platform_chat_id: '',
+        source_name: srv.client.username || 'AFK_Bot',
         message: String(msgToSend),
-        filtered_message: String(msgToSend)
-    };
-
-    // 2. طباعة البيانات في الكونسول للتأكد (للديوغ)
-    console.log("جاري إرسال حزمة (Packet):", JSON.stringify(packetData));
-
-    // 3. الإرسال
-    srv.client.write('text', packetData);
+        xuid: '',
+        platform_chat_id: ''
+    });
 
     bot.sendMessage(chatId, `✅ تم الإرسال: ${msgToSend}`);
 } catch (e) {
-    console.error("خطأ تقني في الباكيت:", e);
-    bot.sendMessage(chatId, `❌ خطأ في البروتوكول: ${e.message}`);
+    // هذا الكونسول هو اللي راح يطلعلك الحقيقة، مو كونسول الأترنوس
+    console.log("--- تفاصيل الخطأ في البوت ---");
+    console.error(e);
+    bot.sendMessage(chatId, `❌ خطأ برمجي: ${e.message}`);
       }
+      
     } else {
       bot.sendMessage(chatId, `❌ صيغة خاطئة!\nاكتب هكذا:\nرسالة 1: شلونكم شباب`);
     }
