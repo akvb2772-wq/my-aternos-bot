@@ -114,19 +114,20 @@ bot.on('message', (msg) => {
       }
 
       try {
-    // إرسال الرسالة بأبسط شكل ممكن (أغلب السيرفرات تحب هذا)
-    srv.client.write('text', {
-        type: 'chat',
-        message: msgToSend,
-        source_name: srv.client.username || 'AFK_Bot',
-        // شلنا الـ xuid والـ platform_chat_id لأنها قد تسبب طرد
-        needs_translation: false,
-        filtered_message: msgToSend
-    });
+  // محاولة إرسال الرسالة بدون الحقول التي قد تسبب تعارضاً
+  srv.client.write('text', {
+    type: 'chat',
+    needs_translation: false,
+    source_name: srv.client.username || 'BotAFK',
+    message: msgToSend,
+    filtered_message: msgToSend
+  });
 
-    bot.sendMessage(chatId, `✅ تم الإرسال: ${msgToSend}`);
+  bot.sendMessage(chatId, `✅ تم الإرسال: ${msgToSend}`);
 } catch (e) {
-    bot.sendMessage(chatId, `❌ فشل الإرسال: ${e.message}`);
+  // طباعة الخطأ مع تفاصيل أكثر لنعرف أي حقل هو السبب
+  console.error("خطأ في إرسال الرسالة:", e);
+  bot.sendMessage(chatId, `❌ فشل الإرسال (حدث خطأ في البروتوكول): ${e.message}`);
       }
     } else {
       bot.sendMessage(chatId, `❌ صيغة خاطئة!\nاكتب هكذا:\nرسالة 1: شلونكم شباب`);
