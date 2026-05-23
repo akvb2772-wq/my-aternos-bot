@@ -114,20 +114,28 @@ bot.on('message', (msg) => {
       }
 
       try {
-  // محاولة إرسال الرسالة بدون الحقول التي قد تسبب تعارضاً
-  srv.client.write('text', {
-    type: 'chat',
-    needs_translation: false,
-    source_name: srv.client.username || 'BotAFK',
-    message: msgToSend,
-    filtered_message: msgToSend
-  });
+  // محاولة إرسال الرسالة بدون الحقول التي قد تسبب تعارضtry {
+    // 1. تجهيز البيانات والتأكد أنها نصوص (String)
+    const packetData = {
+        type: 'chat',
+        needs_translation: false,
+        source_name: String(srv.client.username || 'BotAFK'),
+        xuid: '0', // نضع '0' بدلاً من قيمة فارغة لأن السيرفر يتوقع رقم حساب (نصي)
+        platform_chat_id: '',
+        message: String(msgToSend),
+        filtered_message: String(msgToSend)
+    };
 
-  bot.sendMessage(chatId, `✅ تم الإرسال: ${msgToSend}`);
+    // 2. طباعة البيانات في الكونسول للتأكد (للديوغ)
+    console.log("جاري إرسال حزمة (Packet):", JSON.stringify(packetData));
+
+    // 3. الإرسال
+    srv.client.write('text', packetData);
+
+    bot.sendMessage(chatId, `✅ تم الإرسال: ${msgToSend}`);
 } catch (e) {
-  // طباعة الخطأ مع تفاصيل أكثر لنعرف أي حقل هو السبب
-  console.error("خطأ في إرسال الرسالة:", e);
-  bot.sendMessage(chatId, `❌ فشل الإرسال (حدث خطأ في البروتوكول): ${e.message}`);
+    console.error("خطأ تقني في الباكيت:", e);
+    bot.sendMessage(chatId, `❌ خطأ في البروتوكول: ${e.message}`);
       }
     } else {
       bot.sendMessage(chatId, `❌ صيغة خاطئة!\nاكتب هكذا:\nرسالة 1: شلونكم شباب`);
