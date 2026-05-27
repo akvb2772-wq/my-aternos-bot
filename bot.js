@@ -108,39 +108,31 @@ bot.on('message', (msg) => {
       const msgToSend = match[2].trim();
       const srv = serversList[index];
 
-      // تأكد أولاً أن السيرفر موجود ومتصل
       if (!srv || !srv.client) {
-        bot.sendMessage(chatId, `⚠️ السيرفر غير متصل!`);
+        bot.sendMessage(chatId, `⚠️ السيرفر غير موجود أو غير متصل!`);
         return;
       }
 
       try {
-        // تحصين البيانات: تحويل كل شيء إلى نص (String) لتجنب خطأ undefined
-        const safeMessage = String(msgToSend);
-        const safeName = String(srv.client.username || 'BotAFK');
-
-        // استخدام queue بدلاً من write (أكثر استقراراً في هذا البروتوكول)
-        srv.client.queue('text', {
+        srv.client.write('text', {
           type: 'chat',
           needs_translation: false,
-          source_name: safeName,
-          xuid: '', 
+          source_name: srv.client.username || 'AFK_Bot',
+          message: String(msgToSend),
+          xuid: '',
           platform_chat_id: '',
-          message: safeMessage,
-          filtered_message: safeMessage
+          filtered_message: ''
         });
-
-        bot.sendMessage(chatId, `✅ تم الإرسال: ${safeMessage}`);
+        bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: "${msgToSend}"`);
       } catch (e) {
-        // إذا حدث خطأ، البوت لن يغلق، بل سيخبرك بالسبب
-        console.error("❌ خطأ الإرسال:", e);
-        bot.sendMessage(chatId, `❌ فشل الإرسال (البروتوكول): ${e.message}`);
+        console.error('خطأ إرسال:', e);
+        bot.sendMessage(chatId, `❌ فشل الإرسال: ` + e.message);
       }
     } else {
-      bot.sendMessage(chatId, `❌ صيغة خاطئة!\nاكتب هكذا:\nرسالة 1: هلا شباب`);
+      bot.sendMessage(chatId, `❌ صيغة خاطئة!\nاكتب هكذا:\nرسالة 1: شلونكم شباب`);
     }
     return;
-                        }
+  }
 
   // ➕ إضافة سيرفر
   if (text.startsWith('سيرفر')) {
@@ -354,23 +346,16 @@ function connectMinecraftBot(chatId, srv) {
       srv.connectedAt = Date.now();
       bot.sendMessage(chatId, `✅ استقر البوت في السيرفر!\n🌐 ${srv.ip}:${srv.port}\n👤 ${username}`);
 
+      // AFK بدون باقات تحرك (تمنع الطرد)
       srv.afkInterval = setInterval(() => {
         try {
-          srv.currentTick += BigInt(1);
-          const randomYaw = Math.random() * 360;
-          srv.client.write('player_auth_input', {
-            pitch: 0,
-            yaw: randomYaw,
-            position: srv.lastPosition,
-            move_vector: { x: 0, z: 0 },
-            head_yaw: randomYaw,
-            input_data: { signup: false },
-            input_mode: 'mouse',
-            play_mode: 'normal',
-            tick: srv.currentTick
+          // نبعث packet خفيف للإبقاء على الاتصال
+          srv.client.write('interact', {
+            action_id: 'mouseover',
+            target_block_position: { x: 0, y: 0, z: 0 }
           });
         } catch (e) {}
-      }, 15000);
+      }, 30000);
     });
 
     srv.client.on('move_player', (packet) => {
@@ -427,4 +412,4 @@ function connectMinecraftBot(chatId, srv) {
   } catch (e) {
     if (srv.autoReconnect) triggerReconnect();
   }
-}
+  }
