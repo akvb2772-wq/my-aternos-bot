@@ -108,35 +108,39 @@ bot.on('message', (msg) => {
       const msgToSend = match[2].trim();
       const srv = serversList[index];
 
+      // تأكد أولاً أن السيرفر موجود ومتصل
       if (!srv || !srv.client) {
-        bot.sendMessage(chatId, `⚠️ السيرفر غير موجود أو غير متصل!`);
+        bot.sendMessage(chatId, `⚠️ السيرفر غير متصل!`);
         return;
       }
 
       try {
-    // إرسال الرسالة بطريقة الـ queue وهي الأكثر استقراراً للمكتبة
-    srv.client.queue('text', {
-        type: 'chat',
-        needs_translation: false,
-        source_name: srv.client.username || 'AFK_Bot',
-        message: String(msgToSend),
-        xuid: '',
-        platform_chat_id: ''
-    });
+        // تحصين البيانات: تحويل كل شيء إلى نص (String) لتجنب خطأ undefined
+        const safeMessage = String(msgToSend);
+        const safeName = String(srv.client.username || 'BotAFK');
 
-    bot.sendMessage(chatId, `✅ تم الإرسال: ${msgToSend}`);
-} catch (e) {
-    // هذا الكونسول هو اللي راح يطلعلك الحقيقة، مو كونسول الأترنوس
-    console.log("--- تفاصيل الخطأ في البوت ---");
-    console.error(e);
-    bot.sendMessage(chatId, `❌ خطأ برمجي: ${e.message}`);
+        // استخدام queue بدلاً من write (أكثر استقراراً في هذا البروتوكول)
+        srv.client.queue('text', {
+          type: 'chat',
+          needs_translation: false,
+          source_name: safeName,
+          xuid: '', 
+          platform_chat_id: '',
+          message: safeMessage,
+          filtered_message: safeMessage
+        });
+
+        bot.sendMessage(chatId, `✅ تم الإرسال: ${safeMessage}`);
+      } catch (e) {
+        // إذا حدث خطأ، البوت لن يغلق، بل سيخبرك بالسبب
+        console.error("❌ خطأ الإرسال:", e);
+        bot.sendMessage(chatId, `❌ فشل الإرسال (البروتوكول): ${e.message}`);
       }
-      
     } else {
-      bot.sendMessage(chatId, `❌ صيغة خاطئة!\nاكتب هكذا:\nرسالة 1: شلونكم شباب`);
+      bot.sendMessage(chatId, `❌ صيغة خاطئة!\nاكتب هكذا:\nرسالة 1: هلا شباب`);
     }
     return;
-  }
+                        }
 
   // ➕ إضافة سيرفر
   if (text.startsWith('سيرفر')) {
