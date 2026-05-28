@@ -430,12 +430,22 @@ function connectMinecraftBot(chatId, srv) {
 
     srv.client.on('player_list', (packet) => {
       try {
-        if (packet.records && packet.records.records) {
-          if (packet.records.type === 'add') {
-            srv.playerCount += packet.records.records.length;
-          } else if (packet.records.type === 'remove') {
-            srv.playerCount = Math.max(0, srv.playerCount - packet.records.records.length);
+        // بنية الباقة تختلف حسب الإصدار
+        const records = packet.records;
+        if (!records) return;
+        
+        // شكل 1: { type, records: [...] }
+        if (records.records && Array.isArray(records.records)) {
+          const count = records.records.filter(r => r.username !== username).length;
+          if (records.type === 'add' || records.type === 0) {
+            srv.playerCount += count;
+          } else {
+            srv.playerCount = Math.max(0, srv.playerCount - count);
           }
+        }
+        // شكل 2: مصفوفة مباشرة
+        else if (Array.isArray(records)) {
+          srv.playerCount = records.filter(r => r.username !== username).length;
         }
       } catch(e) {}
     });
@@ -475,46 +485,48 @@ function connectMinecraftBot(chatId, srv) {
       if (!chatId) return;
 
       const time = new Date().toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
+      const pType = packet.type;
 
-      if (packet.type === 'chat' && packet.source_name !== username) {
+      // chat = 1 أو 'chat'
+      const isChat = pType === 1 || pType === 'chat';
+      // translation = 2 أو 'translation'
+      const isTranslation = pType === 2 || pType === 'translation';
+
+      if (isChat && packet.source_name && packet.source_name !== username) {
         const logEntry = `[${time}] ${packet.source_name}: ${packet.message}`;
         srv.chatLog.push(logEntry);
         if (srv.chatLog.length > 100) srv.chatLog.shift();
 
-        // إشعار لو ذكر اسمك
-        if (packet.message.includes(username)) {
+        if (packet.message && packet.message.includes(username)) {
           bot.sendMessage(chatId, `🔔 ذكروا البوت بالشات!\n👤 ${packet.source_name}: ${packet.message}`);
         }
 
         bot.sendMessage(chatId, `💬 [${srv.ip}]\n👤 ${packet.source_name}: ${packet.message}`);
       }
 
-      else if (packet.type === 'translation') {
-        if (packet.message === 'multiplayer.player.joined') {
-          const player = packet.parameters ? packet.parameters[0] : 'لاعب';
+      else if (isTranslation) {
+        const msgKey = packet.message || '';
+        const params = packet.parameters || packet.params || [];
+        
+        if (msgKey.includes('joined') || msgKey === 'multiplayer.player.joined') {
+          const player = params[0] || 'لاعب';
           srv.playerCount++;
           const logEntry = `[${time}] 🟢 دخل: ${player}`;
           srv.playerLog.push(logEntry);
           if (srv.playerLog.length > 100) srv.playerLog.shift();
-
           bot.sendMessage(chatId, `🟢 دخل ${player} إلى السيرفر!\n👥 اللاعبين: ${srv.playerCount}`);
-
-          // 🔔 تنبيه لاعب مراقب
           if (settings.watchedPlayers.some(p => p.toLowerCase() === player.toLowerCase())) {
             bot.sendMessage(chatId, `🚨 تنبيه مراقبة!\n👤 "${player}" دخل السيرفر!`);
           }
         }
 
-        else if (packet.message === 'multiplayer.player.left') {
-          const player = packet.parameters ? packet.parameters[0] : 'لاعب';
+        else if (msgKey.includes('left') || msgKey === 'multiplayer.player.left') {
+          const player = params[0] || 'لاعب';
           srv.playerCount = Math.max(0, srv.playerCount - 1);
           const logEntry = `[${time}] 🔴 خرج: ${player}`;
           srv.playerLog.push(logEntry);
           if (srv.playerLog.length > 100) srv.playerLog.shift();
-
           bot.sendMessage(chatId, `🔴 خرج ${player} من السيرفر!\n👥 اللاعبين: ${srv.playerCount}`);
-
-          // 🔔 تنبيه لاعب مراقب
           if (settings.watchedPlayers.some(p => p.toLowerCase() === player.toLowerCase())) {
             bot.sendMessage(chatId, `🚨 تنبيه مراقبة!\n👤 "${player}" خرج من السيرفر!`);
           }
@@ -563,4 +575,4 @@ function connectMinecraftBot(chatId, srv) {
   } catch (e) {
     if (srv.autoReconnect) triggerReconnect('crash');
   }
-                      }
+      }
