@@ -1,11 +1,32 @@
 const TOKEN = process.env.BOT_TOKEN || '7415233806:AAE-KEZiu5zmQKa4dZnpH41Yld9phDpknqA';
 const PORT = process.env.PORT || 7860;
 const SERVERS_FILE = 'servers.json';
+const SETTINGS_FILE = 'settings.json';
 
 const TelegramBot = require('node-telegram-bot-api');
 const bedrock = require('bedrock-protocol');
 const express = require('express');
 const fs = require('fs');
+
+// =============================
+// إعدادات قابلة للتغيير
+// =============================
+let settings = {
+  botUsername: 'AFK_Bot',
+  watchedPlayers: [], // لاعبين نراقبهم
+};
+
+function saveSettings() {
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+}
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
+    }
+  } catch (e) {}
+}
 
 // =============================
 // حفظ وتحميل السيرفرات
@@ -38,16 +59,15 @@ function createServerObj(ip, port) {
     connectedAt: null,
     lastPosition: { x: 0, y: 64, z: 0 },
     currentTick: BigInt(0),
-    fixedUsername: `AFK_Bot`
+    serverVersion: null,
+    playerCount: 0,
+    chatLog: [],       // سجل الشات
+    playerLog: [],     // سجل الدخول والخروج
   };
 }
 
-function escMd(text) {
-  return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
-}
-
 // =============================
-// إعداد البوت مع Express Webhook
+// Express + Bot Setup
 // =============================
 const app = express();
 app.use(express.json());
@@ -56,40 +76,29 @@ const SPACE_HOST = process.env.SPACE_HOST;
 let bot;
 
 if (SPACE_HOST) {
-  // Webhook mode للـ Hugging Face
   const WEBHOOK_URL = `https://${SPACE_HOST}/bot${TOKEN}`;
   bot = new TelegramBot(TOKEN, { webHook: false });
-
-  bot.setWebHook(WEBHOOK_URL).then(() => {
-    console.log(`✅ Webhook: ${WEBHOOK_URL}`);
-  }).catch(err => console.error('⚠️ خطأ Webhook:', err.message));
-
+  bot.setWebHook(WEBHOOK_URL)
+    .then(() => console.log(`✅ Webhook: ${WEBHOOK_URL}`))
+    .catch(err => console.error('⚠️ خطأ Webhook:', err.message));
   app.post(`/bot${TOKEN}`, (req, res) => {
     bot.processUpdate(req.body);
     res.sendStatus(200);
   });
-
 } else {
-  // Polling mode للتشغيل المحلي
   bot = new TelegramBot(TOKEN, { polling: true });
-  console.log('🔄 تشغيل Polling (محلي)');
+  console.log('🔄 Polling mode');
 }
 
-// صفحة رئيسية
-app.get('/', (req, res) => {
-  res.send('🚀 البوت يعمل!');
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🌐 Server على port ${PORT}`);
-});
+app.get('/', (req, res) => res.send('🚀 البوت يعمل!'));
+app.listen(PORT, '0.0.0.0', () => console.log(`🌐 Server على port ${PORT}`));
 
 process.on('uncaughtException', (err) => console.error('⚠️ خطأ:', err.message));
 process.on('unhandledRejection', (err) => console.error('⚠️ رفض:', err.message));
 
 const serversList = [];
 loadServers();
-
+loadSettings();
 console.log('✅ البوت جاهز!');
 
 // =============================
@@ -100,45 +109,10 @@ bot.on('message', (msg) => {
   const text = msg.text.trim();
   const chatId = msg.chat.id;
 
-// 💬 رسالة لسيرفر محدد
-  if (text.startsWith('رسالة')) {
-    const match = text.match(/رسالة\s*(\d+)\s*:\s*(.+)/);
-    if (match) {
-      const index = parseInt(match[1]) - 1;
-      const msgToSend = match[2].trim();
-      const srv = serversList[index];
-
-      if (!srv || !srv.client) {
-        bot.sendMessage(chatId, `⚠️ السيرفر غير موجود أو غير متصل!`);
-        return;
-      }
-
-      try {
-        srv.client.write('text', {
-          type: 'chat',
-          needs_translation: false,
-          source_name: srv.client.username || 'AFK_Bot',
-          message: String(msgToSend),
-          xuid: '',
-          platform_chat_id: '',
-          filtered_message: ''
-        });
-        bot.sendMessage(chatId, `✅ تم الإرسال للسيرفر [${index + 1}]: "${msgToSend}"`);
-      } catch (e) {
-        console.error('خطأ إرسال:', e);
-        bot.sendMessage(chatId, `❌ فشل الإرسال: ` + e.message);
-      }
-    } else {
-      bot.sendMessage(chatId, `❌ صيغة خاطئة!\nاكتب هكذا:\nرسالة 1: شلونكم شباب`);
-    }
-    return;
-  }
-
   // ➕ إضافة سيرفر
   if (text.startsWith('سيرفر')) {
     let cleanText = text.replace('سيرفر', '').trim();
     let ip = '', port = 0;
-
     if (cleanText.includes(':')) {
       let parts = cleanText.split(':');
       ip = parts[0].trim();
@@ -148,7 +122,6 @@ bot.on('message', (msg) => {
       ip = parts[0].trim();
       port = parseInt(parts[1] ? parts[1].trim() : 0);
     }
-
     if (ip && port && !isNaN(port)) {
       const exists = serversList.find(s => s.ip === ip && s.port === port);
       if (!exists) {
@@ -161,6 +134,50 @@ bot.on('message', (msg) => {
     } else {
       bot.sendMessage(chatId, `❌ صيغة خاطئة!\nأرسل هكذا:\nسيرفر ip:port`);
     }
+    return;
+  }
+
+  // 👁️ مراقبة لاعب - إضافة
+  if (text.startsWith('راقب ')) {
+    const playerName = text.replace('راقب ', '').trim();
+    if (!playerName) return;
+    if (!settings.watchedPlayers.includes(playerName)) {
+      settings.watchedPlayers.push(playerName);
+      saveSettings();
+      bot.sendMessage(chatId, `👁️ تمت إضافة "${playerName}" لقائمة المراقبة!\nسأنبهك لما يدخل أو يخرج.`);
+    } else {
+      bot.sendMessage(chatId, `⚠️ "${playerName}" موجود مسبقاً بالمراقبة.`);
+    }
+    return;
+  }
+
+  // 👁️ إيقاف مراقبة لاعب
+  if (text.startsWith('وقف مراقبة ')) {
+    const playerName = text.replace('وقف مراقبة ', '').trim();
+    const idx = settings.watchedPlayers.indexOf(playerName);
+    if (idx !== -1) {
+      settings.watchedPlayers.splice(idx, 1);
+      saveSettings();
+      bot.sendMessage(chatId, `✅ تم إيقاف مراقبة "${playerName}".`);
+    } else {
+      bot.sendMessage(chatId, `⚠️ "${playerName}" مو موجود بالمراقبة.`);
+    }
+    return;
+  }
+
+  // ✏️ تغيير اسم البوت
+  if (text.startsWith('اسم البوت ')) {
+    const newName = text.replace('اسم البوت ', '').trim();
+    if (newName.length < 3 || newName.length > 16) {
+      bot.sendMessage(chatId, `❌ الاسم لازم يكون بين 3-16 حرف.`);
+      return;
+    }
+    settings.botUsername = newName;
+    saveSettings();
+    // تحديث الاسم بكل السيرفرات الموجودة
+    serversList.forEach(s => { s.fixedUsername = newName; });
+    bot.sendMessage(chatId, `✅ تم تغيير اسم البوت إلى "${newName}".\nسيُطبق عند إعادة الاتصال.`);
+    return;
   }
 });
 
@@ -185,18 +202,29 @@ bot.onText(/\/start/, (msg) => {
       const mins = Math.floor((Date.now() - srv.connectedAt) / 60000);
       timeText = ` | ⏱ ${mins} دقيقة`;
     }
-    statusMsg += `🔹 [${index + 1}]: ${srv.ip}:${srv.port} - ${status}${timeText}\n`;
+    const version = srv.serverVersion ? ` | 📦 ${srv.serverVersion}` : '';
+    const players = srv.client ? ` | 👥 ${srv.playerCount}` : '';
+    statusMsg += `🔹 [${index + 1}]: ${srv.ip}:${srv.port}\n    ${status}${timeText}${version}${players}\n\n`;
 
     inline_keyboard.push([
       { text: `▶️ تشغيل [${index + 1}]`, callback_data: `join_${index}` },
       { text: `⏹️ إيقاف [${index + 1}]`, callback_data: `leave_${index}` },
       { text: `🗑️ حذف [${index + 1}]`, callback_data: `delete_${index}` }
     ]);
+    inline_keyboard.push([
+      { text: `📋 سجل [${index + 1}]`, callback_data: `log_${index}` },
+      { text: `👥 لاعبين [${index + 1}]`, callback_data: `players_${index}` }
+    ]);
   });
 
   inline_keyboard.push([
     { text: '▶️▶️ تشغيل الكل', callback_data: 'join_all' },
     { text: '⏹️⏹️ إيقاف الكل', callback_data: 'leave_all' }
+  ]);
+
+  inline_keyboard.push([
+    { text: '👁️ قائمة المراقبة', callback_data: 'watch_list' },
+    { text: '⚙️ الإعدادات', callback_data: 'settings_menu' }
   ]);
 
   bot.sendMessage(chatId, statusMsg, { reply_markup: { inline_keyboard } });
@@ -223,10 +251,12 @@ bot.onText(/\/status/, (msg) => {
       const mins = Math.floor((Date.now() - srv.connectedAt) / 60000);
       timeText = ` | ⏱ ${mins} دقيقة`;
     }
-    statusMsg += `${index + 1}. ${srv.ip}:${srv.port} - ${status}${timeText}\n`;
+    const version = srv.serverVersion ? ` | 📦 ${srv.serverVersion}` : '';
+    const players = srv.client ? ` | 👥 ${srv.playerCount} لاعب` : '';
+    statusMsg += `${index + 1}. ${srv.ip}:${srv.port}\n   ${status}${timeText}${version}${players}\n\n`;
   });
 
-  statusMsg += `\n📈 المتصل: ${connected}/${serversList.length}`;
+  statusMsg += `📈 المتصل: ${connected}/${serversList.length}`;
   bot.sendMessage(chatId, statusMsg);
 });
 
@@ -237,7 +267,9 @@ bot.onText(/\/help/, (msg) => {
   bot.sendMessage(msg.chat.id,
     `📖 كيفية الاستخدام:\n\n` +
     `➕ إضافة سيرفر:\nسيرفر ip:port\n\n` +
-    `💬 إرسال رسالة لسيرفر محدد:\nرسالة 1: شلونكم شباب\n\n` +
+    `👁️ مراقبة لاعب:\nراقب اسم_اللاعب\n\n` +
+    `🚫 إيقاف مراقبة:\nوقف مراقبة اسم_اللاعب\n\n` +
+    `✏️ تغيير اسم البوت:\nاسم البوت الاسم_الجديد\n\n` +
     `📋 الأوامر:\n` +
     `/start - لوحة التحكم\n` +
     `/status - حالة سريعة\n` +
@@ -295,6 +327,51 @@ bot.on('callback_query', async (query) => {
     bot.sendMessage(chatId, `✅ تم حذف ${deletedIp} من القائمة.`);
   }
 
+  // 📋 سجل الشات
+  else if (data.startsWith('log_')) {
+    const index = parseInt(data.split('_')[1]);
+    const srv = serversList[index];
+    if (!srv) return;
+    if (srv.chatLog.length === 0) {
+      bot.sendMessage(chatId, `📋 سجل الشات للسيرفر [${index + 1}] فارغ.`);
+    } else {
+      const last20 = srv.chatLog.slice(-20).join('\n');
+      bot.sendMessage(chatId, `📋 آخر رسائل السيرفر [${index + 1}]:\n\n${last20}`);
+    }
+  }
+
+  // 👥 سجل الدخول والخروج
+  else if (data.startsWith('players_')) {
+    const index = parseInt(data.split('_')[1]);
+    const srv = serversList[index];
+    if (!srv) return;
+    if (srv.playerLog.length === 0) {
+      bot.sendMessage(chatId, `👥 ما في سجل دخول/خروج للسيرفر [${index + 1}] بعد.`);
+    } else {
+      const last20 = srv.playerLog.slice(-20).join('\n');
+      bot.sendMessage(chatId, `👥 سجل اللاعبين [${index + 1}]:\n\n${last20}`);
+    }
+  }
+
+  // 👁️ قائمة المراقبة
+  else if (data === 'watch_list') {
+    if (settings.watchedPlayers.length === 0) {
+      bot.sendMessage(chatId, `👁️ قائمة المراقبة فارغة.\n\nأضف لاعب هكذا:\nراقب اسم_اللاعب`);
+    } else {
+      bot.sendMessage(chatId, `👁️ اللاعبين المراقبين:\n\n${settings.watchedPlayers.map((p, i) => `${i + 1}. ${p}`).join('\n')}\n\nإيقاف المراقبة:\nوقف مراقبة الاسم`);
+    }
+  }
+
+  // ⚙️ الإعدادات
+  else if (data === 'settings_menu') {
+    bot.sendMessage(chatId,
+      `⚙️ الإعدادات الحالية:\n\n` +
+      `👤 اسم البوت: ${settings.botUsername}\n` +
+      `👁️ لاعبين مراقبين: ${settings.watchedPlayers.length}\n\n` +
+      `لتغيير الاسم:\nاسم البوت الاسم_الجديد`
+    );
+  }
+
   else if (data === 'join_all') {
     if (serversList.length === 0) { bot.sendMessage(chatId, '📭 ما في سيرفرات.'); return; }
     bot.sendMessage(chatId, `⏳ جاري تشغيل جميع السيرفرات (${serversList.length})...`);
@@ -329,9 +406,10 @@ function connectMinecraftBot(chatId, srv) {
   }
   if (srv.afkInterval) { clearInterval(srv.afkInterval); srv.afkInterval = null; }
 
-  const username = srv.fixedUsername || `AFK_Bot`;
+  const username = settings.botUsername || 'AFK_Bot';
   srv.lastPosition = { x: 0, y: 64, z: 0 };
   srv.currentTick = BigInt(0);
+  srv.playerCount = 0;
 
   try {
     srv.client = bedrock.createClient({
@@ -341,15 +419,41 @@ function connectMinecraftBot(chatId, srv) {
       offline: true
     });
 
+    // جلب معلومات السيرفر (إصدار + عدد لاعبين)
+    srv.client.on('start_game', (packet) => {
+      try {
+        if (packet.level_game_type !== undefined) {
+          srv.serverVersion = srv.client.version || 'Bedrock';
+        }
+      } catch(e) {}
+    });
+
+    srv.client.on('player_list', (packet) => {
+      try {
+        if (packet.records && packet.records.records) {
+          if (packet.records.type === 'add') {
+            srv.playerCount += packet.records.records.length;
+          } else if (packet.records.type === 'remove') {
+            srv.playerCount = Math.max(0, srv.playerCount - packet.records.records.length);
+          }
+        }
+      } catch(e) {}
+    });
+
     srv.client.on('join', () => {
       srv.reconnectAttempts = 0;
       srv.connectedAt = Date.now();
-      bot.sendMessage(chatId, `✅ استقر البوت في السيرفر!\n🌐 ${srv.ip}:${srv.port}\n👤 ${username}`);
+      srv.serverVersion = srv.client.version || 'Bedrock';
+      bot.sendMessage(chatId,
+        `✅ استقر البوت في السيرفر!\n` +
+        `🌐 ${srv.ip}:${srv.port}\n` +
+        `👤 ${username}\n` +
+        `📦 الإصدار: ${srv.serverVersion}`
+      );
 
-      // AFK بدون باقات تحرك (تمنع الطرد)
+      // AFK خفيف بدون باقات تحرك
       srv.afkInterval = setInterval(() => {
         try {
-          // نبعث packet خفيف للإبقاء على الاتصال
           srv.client.write('interact', {
             action_id: 'mouseover',
             target_block_position: { x: 0, y: 0, z: 0 }
@@ -359,27 +463,66 @@ function connectMinecraftBot(chatId, srv) {
     });
 
     srv.client.on('move_player', (packet) => {
-      if (packet.runtime_id === srv.client.runtime_id || !srv.lastPosition.x) {
-        srv.lastPosition = packet.position;
-      }
+      try {
+        if (packet.runtime_id === srv.client.runtime_id) {
+          srv.lastPosition = packet.position;
+        }
+      } catch(e) {}
     });
 
+    // 💬 الشات + سجل + مراقبة لاعبين
     srv.client.on('text', (packet) => {
       if (!chatId) return;
+
+      const time = new Date().toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
+
       if (packet.type === 'chat' && packet.source_name !== username) {
+        const logEntry = `[${time}] ${packet.source_name}: ${packet.message}`;
+        srv.chatLog.push(logEntry);
+        if (srv.chatLog.length > 100) srv.chatLog.shift();
+
+        // إشعار لو ذكر اسمك
+        if (packet.message.includes(username)) {
+          bot.sendMessage(chatId, `🔔 ذكروا البوت بالشات!\n👤 ${packet.source_name}: ${packet.message}`);
+        }
+
         bot.sendMessage(chatId, `💬 [${srv.ip}]\n👤 ${packet.source_name}: ${packet.message}`);
-      } else if (packet.type === 'translation') {
+      }
+
+      else if (packet.type === 'translation') {
         if (packet.message === 'multiplayer.player.joined') {
           const player = packet.parameters ? packet.parameters[0] : 'لاعب';
-          bot.sendMessage(chatId, `🟢 دخل ${player} إلى السيرفر!`);
-        } else if (packet.message === 'multiplayer.player.left') {
+          srv.playerCount++;
+          const logEntry = `[${time}] 🟢 دخل: ${player}`;
+          srv.playerLog.push(logEntry);
+          if (srv.playerLog.length > 100) srv.playerLog.shift();
+
+          bot.sendMessage(chatId, `🟢 دخل ${player} إلى السيرفر!\n👥 اللاعبين: ${srv.playerCount}`);
+
+          // 🔔 تنبيه لاعب مراقب
+          if (settings.watchedPlayers.some(p => p.toLowerCase() === player.toLowerCase())) {
+            bot.sendMessage(chatId, `🚨 تنبيه مراقبة!\n👤 "${player}" دخل السيرفر!`);
+          }
+        }
+
+        else if (packet.message === 'multiplayer.player.left') {
           const player = packet.parameters ? packet.parameters[0] : 'لاعب';
-          bot.sendMessage(chatId, `🔴 خرج ${player} من السيرفر!`);
+          srv.playerCount = Math.max(0, srv.playerCount - 1);
+          const logEntry = `[${time}] 🔴 خرج: ${player}`;
+          srv.playerLog.push(logEntry);
+          if (srv.playerLog.length > 100) srv.playerLog.shift();
+
+          bot.sendMessage(chatId, `🔴 خرج ${player} من السيرفر!\n👥 اللاعبين: ${srv.playerCount}`);
+
+          // 🔔 تنبيه لاعب مراقب
+          if (settings.watchedPlayers.some(p => p.toLowerCase() === player.toLowerCase())) {
+            bot.sendMessage(chatId, `🚨 تنبيه مراقبة!\n👤 "${player}" خرج من السيرفر!`);
+          }
         }
       }
     });
 
-    const triggerReconnect = () => {
+    const triggerReconnect = (reason) => {
       if (!srv.autoReconnect) return;
       if (srv.reconnectTimer) return;
 
@@ -392,7 +535,8 @@ function connectMinecraftBot(chatId, srv) {
       }
 
       srv.reconnectAttempts++;
-      bot.sendMessage(chatId, `⚠️ فصل البوت من ${srv.ip}! محاولة [${srv.reconnectAttempts}/3]...`);
+      const reasonText = reason === 'kicked' ? '⚠️ انطرد البوت' : '⚠️ فصل البوت';
+      bot.sendMessage(chatId, `${reasonText} من ${srv.ip}! محاولة [${srv.reconnectAttempts}/3]...`);
 
       srv.reconnectTimer = setTimeout(() => {
         srv.reconnectTimer = null;
@@ -400,16 +544,23 @@ function connectMinecraftBot(chatId, srv) {
       }, 15000);
     };
 
-    srv.client.on('close', () => { srv.connectedAt = null; triggerReconnect(); });
-    srv.client.on('end', () => { srv.connectedAt = null; triggerReconnect(); });
+    srv.client.on('disconnect', (packet) => {
+      srv.connectedAt = null;
+      const reason = packet.message || 'غير معروف';
+      bot.sendMessage(chatId, `⚠️ طُرد البوت من ${srv.ip}!\n📝 السبب: ${reason}`);
+      triggerReconnect('kicked');
+    });
+
+    srv.client.on('close', () => { srv.connectedAt = null; triggerReconnect('close'); });
+    srv.client.on('end', () => { srv.connectedAt = null; triggerReconnect('end'); });
     srv.client.on('error', (err) => {
-      if (srv.autoReconnect) triggerReconnect();
+      if (srv.autoReconnect) triggerReconnect('error');
       else if (!err.message.includes('Client network socket')) {
         bot.sendMessage(chatId, `❌ فشل الدخول لـ ${srv.ip}.`);
       }
     });
 
   } catch (e) {
-    if (srv.autoReconnect) triggerReconnect();
+    if (srv.autoReconnect) triggerReconnect('crash');
   }
-  }
+                      }
