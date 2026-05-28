@@ -422,9 +422,10 @@ function connectMinecraftBot(chatId, srv) {
     // جلب معلومات السيرفر (إصدار + عدد لاعبين)
     srv.client.on('start_game', (packet) => {
       try {
-        if (packet.level_game_type !== undefined) {
-          srv.serverVersion = srv.client.version || 'Bedrock';
-        }
+        srv.serverVersion = packet.player_game_type !== undefined
+          ? (srv.client.version || packet.game_version || 'Bedrock')
+          : 'Bedrock';
+        console.log('[VERSION]', srv.serverVersion, '| start_game keys:', Object.keys(packet).join(', '));
       } catch(e) {}
     });
 
@@ -453,7 +454,11 @@ function connectMinecraftBot(chatId, srv) {
     srv.client.on('join', () => {
       srv.reconnectAttempts = 0;
       srv.connectedAt = Date.now();
-      srv.serverVersion = srv.client.version || 'Bedrock';
+      // جلب الإصدار من كل الأماكن الممكنة
+      srv.serverVersion = srv.client.version
+        || srv.client.options?.version
+        || srv.client.game_version
+        || 'Bedrock';
       bot.sendMessage(chatId,
         `✅ استقر البوت في السيرفر!\n` +
         `🌐 ${srv.ip}:${srv.port}\n` +
@@ -487,10 +492,13 @@ function connectMinecraftBot(chatId, srv) {
       const time = new Date().toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
       const pType = packet.type;
 
-      // chat = 1 أو 'chat'
-      const isChat = pType === 1 || pType === 'chat';
-      // translation = 2 أو 'translation'
-      const isTranslation = pType === 2 || pType === 'translation';
+      // debug مؤقت - يطلع نوع الباقة بالكونسول
+      console.log(`[TEXT PACKET] type=${JSON.stringify(pType)} source=${packet.source_name} msg=${packet.message}`);
+
+      // نقبل أي نوع شات
+      const isChat = pType === 1 || pType === 'chat' || pType === 0 || pType === 'raw';
+      // translation
+      const isTranslation = pType === 2 || pType === 'translation' || pType === 8 || pType === 'announcement';
 
       if (isChat && packet.source_name && packet.source_name !== username) {
         const logEntry = `[${time}] ${packet.source_name}: ${packet.message}`;
