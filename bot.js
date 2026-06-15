@@ -13,7 +13,7 @@ const express     = require('express');
 const fs          = require('fs');
 
 if (!TOKEN) {
-  console.error("❌ لم يتم العثور على التوكن! تأكد من إضافته في Variables باسم BOT_TOKEN");
+  console.error("❌ لن يتم العثور على التوكن! تأكد من إضافته في Variables باسم BOT_TOKEN");
 }
 
 let settings = { botUsernames: [{ name: 'MC_AFK_Player', version: 'latest' }], watchedPlayers: [] };
