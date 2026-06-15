@@ -131,6 +131,24 @@ const pendingState = {};
 //  الطريقة الأصح: command_request بدل text packet
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function sendMCMessage(conn, message, cb) {
+  // الطريقة الأساسية: text packet ببيانات كاملة (اقتراح المستخدم + تحسينات)
+  try {
+    conn.write('text', {
+      type: 'chat',
+      needs_translation: false,
+      source_name: conn.username || '',
+      xuid: '',
+      platform_chat_id: '',
+      message: message,
+      filtered_message: message, // السيرفرات الحديثة تشترطها
+    });
+    if (cb) cb(true);
+    return;
+  } catch(e1) {
+    console.error('[sendMC text]', e1.message);
+  }
+
+  // fallback: command_request
   try {
     conn.write('command_request', {
       command:  `say ${message}`,
@@ -139,23 +157,9 @@ function sendMCMessage(conn, message, cb) {
       version:  52,
     });
     if (cb) cb(true);
-  } catch(e1) {
-    // fallback: text packet
-    try {
-      conn.write('text', {
-        type: 'chat',
-        needs_translation: false,
-        source_name: '',
-        xuid: '',
-        platform_chat_id: '',
-        message,
-        filtered_message: '',
-      });
-      if (cb) cb(true);
-    } catch(e2) {
-      console.error('[sendMC]', e2.message);
-      if (cb) cb(false);
-    }
+  } catch(e2) {
+    console.error('[sendMC cmd]', e2.message);
+    if (cb) cb(false);
   }
 }
 
@@ -806,18 +810,17 @@ function connectSingleBot(chatId, srv, botObj) {
       const pType = packet.type;
 
       // DEBUG في الكونسول
-      console.log(`[TEXT] type=${JSON.stringify(pType)} src="${packet.source_name}" msg="${packet.message}"`);
+      // لوج كامل لكل packet يوصل - مهم للتشخيص
+      console.log(`[TEXT] type=${JSON.stringify(pType)} | src="${packet.source_name}" | msg="${packet.message}" | params=${JSON.stringify(packet.parameters||[])}`);
 
-      // رسائل الشات - نقبل أي type مو فارغ المصدر
-      const isChat = (
-        [0, 1, 'chat', 'raw', 'whisper', 'say'].includes(pType) &&
-        packet.source_name &&
-        packet.source_name.trim() !== '' &&
-        !getBotNames().includes(packet.source_name)
-      );
+      // رسائل الشات: أي packet عنده source_name = رسالة شات
+      // لا نعتمد على type لأن كل سيرفر يرسل type مختلف
+      const hasSource     = !!(packet.source_name && packet.source_name.trim());
+      const notBot        = !getBotNames().includes(packet.source_name);
+      const isChat        = hasSource && notBot;
 
-      // رسائل الترجمة (دخول/خروج)
-      const isTranslation = [2, 9, 'translation', 'announcement'].includes(pType);
+      // رسائل الدخول/الخروج: بدون source_name
+      const isTranslation = !hasSource;
 
       if (isChat) {
         const entry = `[${time}] 💬 ${packet.source_name}: ${packet.message}`;
@@ -959,4 +962,4 @@ function triggerReconnect(chatId, srv) {
     srv.reconnectTimer = null;
     if (srv.autoReconnect) connectAllBots(chatId, srv);
   }, 15000);
-}
+                 }
