@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════╗
-// ║  🎮 Minecraft AFK Bot v13.0 (Fixed) ║
+// ║  🎮 Minecraft AFK Bot v14.0 (Final) ║
 // ╚══════════════════════════════════════╝
 
 const TOKEN         = process.env.BOT_TOKEN;
@@ -57,27 +57,36 @@ if (TOKEN) {
   }
 }
 
-app.get('/', (_, res) => res.send('🚀 البوت يعمل الآن بشكل مستقر وخالي من التقطيع!'));
+app.get('/', (_, res) => res.send('🚀 البوت v14 يعمل الآن باستقرار ونظام الشات نظيف تماماً!'));
 app.listen(PORT, '0.0.0.0');
 
 loadSettings(); loadServers();
 const pendingState = {};
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// إرسال رسائل آمن (تم إصلاح سبب الطرد هنا)
+// حل مشكلة الطرد عند إرسال رسالة 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function sendMCMessage(clientObj, message, cb) {
   if (!clientObj || !clientObj.connection) return cb ? cb(false) : null;
   try {
-    // تم الإصلاح: استخدام اسم البوت المخزن في clientObj بشكل صريح لمنع السيرفر من رفض الحزمة
-    clientObj.connection.write('text', {
-      type: 'chat',
-      needs_translation: false,
-      source_name: clientObj.username, 
-      xuid: '', 
-      platform_chat_id: '',
-      message: message
-    });
+    // التمييز بين إرسال أمر أو إرسال نص لتجنب طرد أثيرنوس
+    if (message.startsWith('/')) {
+      clientObj.connection.write('command_request', {
+        command: message,
+        origin: { type: 0, uuid: '', request_id: '' },
+        internal: false,
+        version: 52
+      });
+    } else {
+      clientObj.connection.write('text', {
+        type: 'chat',
+        needs_translation: false,
+        source_name: clientObj.username,
+        xuid: '',
+        platform_chat_id: '',
+        message: message
+      });
+    }
     if (cb) cb(true);
   } catch(e) {
     if (cb) cb(false);
@@ -91,7 +100,7 @@ function editOrSend(chatId, msgId, text, opts) {
 }
 
 function sendMainMenu(chatId, msgId) {
-  let txt = `🎮 لوحة التحكم الإستراتيجية v13.0\n${'━'.repeat(25)}\n\n🤖 البوتات: ${settings.botUsernames.length}\n🌐 السيرفرات: ${serversList.length}`;
+  let txt = `🎮 لوحة التحكم v14.0\n${'━'.repeat(25)}\n\n🤖 البوتات: ${settings.botUsernames.length}\n🌐 السيرفرات: ${serversList.length}`;
   const kb = [
     [{ text: '🌐 السيرفرات', callback_data: 'menu_servers' }, { text: '🤖 البوتات', callback_data: 'menu_bots' }],
     serversList.length > 0 ? [{ text: '▶️ تشغيل الكل', callback_data: 'join_all' }, { text: '⏹️ إيقاف الكل', callback_data: 'leave_all' }] : []
@@ -105,7 +114,7 @@ function sendServersMenu(chatId, msgId) {
   const kb = [];
   serversList.forEach((srv, i) => {
     const connected = srv.clients.filter(c => c.connection).length > 0;
-    txt += `🔹 [${i+1}] ${srv.ip}:${srv.port}\n   الوضع: ${connected ? '🟢 متصل' : '🔴 منقطع'}\n\n`;
+    txt += `🔹 [${i+1}] ${srv.ip}:${srv.port}\n   الوضع: ${connected ? '🟢 متصل' : (srv.autoReconnect ? '⏳ يعيد الاتصال' : '🔴 متوقف')}\n\n`;
     kb.push([{ text: `▶️ دخول [${i+1}]`, callback_data: `join_${i}` }, { text: `⏹️ خروج [${i+1}]`, callback_data: `leave_${i}` }, { text: `🗑️ حذف [${i+1}]`, callback_data: `delete_${i}` }]);
     kb.push([{ text: `💬 الشات`, callback_data: `log_${i}` }, { text: `📨 إرسال نص`, callback_data: `send_msg_${i}` }]);
   });
@@ -147,8 +156,8 @@ if (bot) {
       if (state.action === 'send_chat_msg') {
         const srv = serversList[state.data.srvIndex];
         const activeConn = srv?.clients.find(c => c.connection);
-        if (!activeConn) return bot.sendMessage(chatId, `❌ البوت غير متصل.`);
-        sendMCMessage(activeConn, text, (ok) => bot.sendMessage(chatId, ok ? `✅ أُرسلت: ${text}` : `❌ فشل الإرسال.`));
+        if (!activeConn) return bot.sendMessage(chatId, `❌ البوت غير متصل حالياً.`);
+        sendMCMessage(activeConn, text, (ok) => bot.sendMessage(chatId, ok ? `✅ أُرسلت الرسالة بنجاح.` : `❌ فشل الإرسال.`));
         return;
       }
     }
@@ -178,12 +187,12 @@ if (bot) {
     }
     if (data.startsWith('leave_') && data !== 'leave_all') {
       const srv = serversList[parseInt(data.split('_')[1])]; srv.autoReconnect = false; disconnectAllBots(srv);
-      bot.sendMessage(chatId, `⏹️ تم سحب البوتات.`);
+      bot.sendMessage(chatId, `⏹️ تم إيقاف الدخول التلقائي وسحب البوتات.`);
     }
 
     if (data.startsWith('send_msg_')) {
       const i = parseInt(data.split('_')[2]); pendingState[chatId] = { action: 'send_chat_msg', data: { srvIndex: i } };
-      return bot.sendMessage(chatId, `📨 اكتب الرسالة التي تريد إرسالها:`);
+      return bot.sendMessage(chatId, `📨 اكتب الرسالة (أو الأمر مبدوء بـ /) التي تريد إرسالها:`);
     }
 
     if (data.startsWith('log_')) {
@@ -221,9 +230,8 @@ function connectSingleBot(chatId, srv, botObj) {
 
     conn.on('spawn', () => {
       srv.reconnectAttempts = 0; if (!srv.connectedAt) srv.connectedAt = Date.now();
-      if (bot) bot.sendMessage(chatId, `✅ نجح الدخول الآمن للبوت: [${username}]`);
+      if (bot) bot.sendMessage(chatId, `✅ دخل البوت [${username}] للسيرفر بنجاح.`);
       
-      // نظام منع الطرد: حركة اليد فقط (آمن 100%)
       clientObj.interval = setInterval(() => {
         try {
           if (clientObj.runtimeEntityId) {
@@ -234,22 +242,31 @@ function connectSingleBot(chatId, srv, botObj) {
     });
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // حل مشكلة التقطيع في قراءة الشات
+    // حل مشكلة طلاسم الشات (rawtext JSON)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     conn.on('text', (packet) => {
-      let displayMsg = '';
+      let rawMsg = packet.message || '';
       
-      // تنظيف الأكواد اللونية من كل الأجزاء لتجنب التقطيع
-      const cleanMsg = (packet.message || '').replace(/§[0-9a-fk-or]/ig, '').trim();
+      // تفكيك تشفير rawtext للحصول على النص الصافي
+      try {
+        const parsed = JSON.parse(rawMsg);
+        if (parsed.rawtext) {
+          rawMsg = parsed.rawtext.map(rt => rt.text || '').join('');
+        }
+      } catch (e) {
+        // إذا لم يكن بصيغة JSON، اتركه كما هو
+      }
+
+      const cleanMsg = rawMsg.replace(/§[0-9a-fk-or]/ig, '').trim();
       const cleanSource = (packet.source_name || '').replace(/§[0-9a-fk-or]/ig, '').trim();
       const cleanParams = (packet.parameters || []).map(p => p.replace(/§[0-9a-fk-or]/ig, '').trim());
 
+      let displayMsg = '';
       if (packet.type === 'translation') {
         if (cleanMsg === 'chat.type.text' || cleanMsg === 'chat.type.announcement') {
-          // دمج الأجزاء بشكل كامل لمنع وصول الجملة مقطوعة
           displayMsg = `${cleanParams[0]}: ${cleanParams.slice(1).join(' ')}`;
         } else if (cleanMsg.includes('joined') || cleanMsg.includes('left')) {
-          return; // تجاهل رسائل الدخول والخروج لتقليل التشويش
+          return; // منع ظهور رسائل الدخول والخروج المتكررة
         } else {
           displayMsg = cleanParams.join(' ');
         }
@@ -265,16 +282,19 @@ function connectSingleBot(chatId, srv, botObj) {
       }
     });
 
-    conn.on('disconnect', (p) => { cleanup(); if (bot) bot.sendMessage(chatId, `⚠️ انفصل [${username}]: ${p.message || 'إنهاء السيرفر للاتصال'}`); triggerReconnect(chatId, srv); });
+    conn.on('disconnect', (p) => { cleanup(); if (bot) bot.sendMessage(chatId, `⚠️ انفصل البوت: ${p.message || 'إنهاء السيرفر للاتصال'}`); triggerReconnect(chatId, srv); });
     conn.on('close', () => { cleanup(); triggerReconnect(chatId, srv); });
     conn.on('error', () => { cleanup(); triggerReconnect(chatId, srv); });
 
   } catch(e) { cleanup(); triggerReconnect(chatId, srv); }
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// حل مشكلة الدخول التلقائي (محاولات لا نهائية)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function triggerReconnect(chatId, srv) {
   if (!srv.autoReconnect) return;
-  if (srv.reconnectAttempts >= 3) { srv.autoReconnect = false; return; }
   srv.reconnectAttempts++;
-  setTimeout(() => { if (srv.autoReconnect) connectAllBots(chatId, srv); }, 10000);
-      }
+  if (bot) bot.sendMessage(chatId, `⏳ السيرفر مغلق أو انطرد البوت. جاري إعادة الدخول التلقائي... (المحاولة ${srv.reconnectAttempts})`);
+  setTimeout(() => { if (srv.autoReconnect) connectAllBots(chatId, srv); }, 15000); // المحاولة كل 15 ثانية للأبد
+            }
